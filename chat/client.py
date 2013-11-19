@@ -38,6 +38,27 @@ class Message(object):
         self._handle = handle
 
 
+    def __str__(self):
+        """
+        Pretty string
+        """
+        return "{0} said '{1}'".format(self._handle, self._message)
+
+
+    def __repr__(self):
+        """
+        String representation
+        """
+        return 'Message({0:r}, {1:r})'.format(self._message, self._handle)
+
+
+    def _serialize(self):
+        """
+        jsonrpclib custom serialization method
+        """
+        return [self._message, self._handle], {}
+
+
     def getHandle(self):
         """
         The message sender
