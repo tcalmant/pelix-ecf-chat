@@ -157,8 +157,12 @@ class ChatClient(object):
         return [('post', self.post)]
 
 
-    def post(self, io_handler, message):
+    def post(self, io_handler, *args):
         """
         Posts a message to the server
         """
-        self._server.post(Message(message, self._handle))
+        if args:
+            self._server.post(Message(' '.join(args), self._handle))
+
+        else:
+            io_handler.write_line("Nothing to say ?")
