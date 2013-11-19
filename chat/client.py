@@ -58,7 +58,8 @@ class Message(object):
 @Provides(chat.constants.SPEC_CHAT_LISTENER)
 @Provides(pelix.shell.SHELL_COMMAND_SPEC)
 @Property('_handle', chat.constants.PROP_CLIENT_HANDLE, 'John Doe')
-@Property('_export', pelix.remote.PROP_EXPORTED_INTERFACES, '*')
+@Property('_export', pelix.remote.PROP_EXPORTED_INTERFACES,
+          [chat.constants.SPEC_CHAT_LISTENER])
 class ChatClient(object):
     """
     Basic chat client: publishes a shell command chat.post <message> and
