@@ -115,7 +115,7 @@ class ChatClient(object):
         """
         Notification of a received message
         """
-        messages = self._server.get_messages(timestamp)
+        messages = self._server.getMessages(timestamp)
         for message in messages:
             print("> {0}: {1}".format(message.getHandle(),
                                       message.getMessage()))
