@@ -1,5 +1,47 @@
 pelix-ecf-chat
-==============
+##############
 
 Simple chat client and server based on Pelix remote services
 
+Requirements
+************
+
+This projects is based on Pelix/iPOPO, that can be installed using:
+
+.. code-block:: bash
+
+   sudo pip-3 install iPOPO
+
+
+This project uses random TCP (HTTP) ports, and the Remote Services discovery
+service is (for now) using UDP port 42000, in multicast.
+Let your firewall open for tests (an argument to define those ports will come
+soon).
+
+
+Server
+******
+
+Run the main script with the ``--server`` argument.
+
+.. code-block:: python
+   
+   python3 main.py --server
+   
+
+Client
+******
+
+Run the main script with the ``--name`` argument.
+
+.. code-block:: python
+
+   python3 main.py --name Tom
+
+   
+You can then use the ``post`` chat command to talk to other clients :
+
+.. code-block:: bash
+
+   $ post Hello, World !
+   > Tom: Hello, World !
