@@ -26,39 +26,13 @@ import pelix.shell
 
 # ------------------------------------------------------------------------------
 
-class Message(object):
-    """
-    The message transmitted over network
-    """
-    def __init__(self, message, handle):
-        """
-        Sets up members
-        """
-        self._message = message
-        self._handle = handle
-
-
-    def getHandle(self):
-        """
-        The message sender
-        """
-        return self._handle
-
-
-    def getMessage(self):
-        """
-        The message text
-        """
-        return self._message
-
-# ------------------------------------------------------------------------------
-
 @ComponentFactory(chat.constants.FACTORY_CLIENT)
 @Requires('_server', chat.constants.SPEC_CHAT_SERVER)
 @Provides(chat.constants.SPEC_CHAT_LISTENER)
 @Provides(pelix.shell.SHELL_COMMAND_SPEC)
 @Property('_handle', chat.constants.PROP_CLIENT_HANDLE, 'John Doe')
-@Property('_export', pelix.remote.PROP_EXPORTED_INTERFACES, '*')
+@Property('_export', pelix.remote.PROP_EXPORTED_INTERFACES,
+          [chat.constants.SPEC_CHAT_LISTENER])
 class ChatClient(object):
     """
     Basic chat client: publishes a shell command chat.post <message> and
@@ -114,7 +88,7 @@ class ChatClient(object):
         """
         Notification of a received message
         """
-        messages = self._server.get_messages(timestamp)
+        messages = self._server.getMessages(timestamp)
         for message in messages:
             print("> {0}: {1}".format(message.getHandle(),
                                       message.getMessage()))
@@ -156,8 +130,13 @@ class ChatClient(object):
         return [('post', self.post)]
 
 
-    def post(self, io_handler, message):
+    def post(self, io_handler, *args):
         """
         Posts a message to the server
         """
-        self._server.post(Message(message, self._handle))
+        if args:
+            self._server.post(chat.constants.Message(' '.join(args),
+                                                     self._handle))
+
+        else:
+            io_handler.write_line("Nothing to say ?")

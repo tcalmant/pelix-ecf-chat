@@ -51,8 +51,11 @@ class ChatServer(object):
         # Export property
         self._export = None
 
-        # Messages: sorted list of tuples (time, message)
-        self.__messages = []
+        # Messages: time -> messages
+        self.__messages = {}
+
+        # Time stamps (speeds up look up)
+        self.__times = []
 
         # Notification thread
         self.__pool = pelix.threadpool.ThreadPool(1, logname="ChatServer")
@@ -69,8 +72,11 @@ class ChatServer(object):
         Gets messages received after the given time
         """
         with self.__lock:
-            base_idx = bisect.bisect_right(self.__messages, time)
-            return [message[1] for message in self.__messages[base_idx:]]
+            # Get left index, to retrieve strict equality times
+            base_idx = bisect.bisect_left(self.__times, time)
+            return [message
+                    for message in self.__messages[time]
+                    for time in self.__times[base_idx:]]
 
 
     def getHandles(self):
@@ -91,7 +97,14 @@ class ChatServer(object):
         with self.__lock:
             # Store the message
             timestamp = time.time()
-            bisect.insort(self.__messages, (timestamp, message))
+            try:
+                # Already got a message at the exact same time
+                self.__messages[timestamp].append(message)
+
+            except KeyError:
+                # New message
+                bisect.insort_right(self.__times, timestamp)
+                self.__messages[timestamp] = [message]
 
             # Notify listeners
             if self._listeners:
