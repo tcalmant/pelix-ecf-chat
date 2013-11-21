@@ -56,7 +56,8 @@ def start_remote_services(context):
                    "pelix.remote.dispatcher",
                    "pelix.remote.registry",
                    "pelix.remote.json_rpc",
-                   "pelix.remote.discovery.multicast"):
+                   "pelix.remote.discovery.multicast",
+                   "experiment.mdnssd"):
         context.install_bundle(bundle).start()
 
     # Instantiate components
@@ -73,6 +74,10 @@ def start_remote_services(context):
         # ... multicast discovery
         ipopo.instantiate("pelix-remote-discovery-multicast-factory",
                           "pelix-remote-discovery-multicast", {})
+
+        # ... mDNS discovery
+        ipopo.instantiate("experiment-zeroconf-discovery-factory",
+                          "experiment-zeroconf-discovery", {})
 
         # ... JSON-RPC exporter and importer
         ipopo.instantiate("pelix-jsonrpc-exporter-factory",
@@ -121,4 +126,7 @@ def main(args):
 
 if __name__ == "__main__":
     # Script call
+    import logging
+    logging.basicConfig(level=logging.INFO)
+
     main(sys.argv[1:])
