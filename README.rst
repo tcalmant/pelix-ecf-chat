@@ -29,6 +29,18 @@ Let your firewall open for tests (an argument to define those ports will come
 soon).
 
 
+Finally, the mDNS discovery (work in progress), is based on ``pyzeroconf``
+by Mike C. Fletcher, at https://github.com/mcfletch/pyzeroconf.
+This library adds support for Zeroconf in Python 2 (not Python 3).
+
+.. code-block:: bash
+
+   $ wget https://github.com/mcfletch/pyzeroconf/archive/master.zip
+   $ unzip master.zip
+   $ cd pyzeroconf-master
+   $ sudo python setup.py install
+
+
 Server
 ******
 
