@@ -41,34 +41,73 @@ __docformat__ = "restructuredtext en"
 # Local
 import experiment.beans as beans
 
+# Pelix
+import pelix.constants
+import pelix.remote
+
 # Standard library
-import threading
-import xml.etree.ElementTree as ElementTree
+try:
+    # Python 2
+    import StringIO
+    StringIO = StringIO.StringIO
+
+except ImportError:
+    # Python 3
+    import io
+    StringIO = io.StringIO
+
+try:
+    # C version
+    import xml.etree.cElementTree as ElementTree
+except ImportError:
+    # Fall back
+    import xml.etree.ElementTree as ElementTree
 
 # ------------------------------------------------------------------------------
 
+# EDEF XML name space
+EDEF_NAMESPACE = "http://www.osgi.org/xmlns/rsa/v1.0.0"
+
 # EDEF tags
-TAG_ENDPOINT_DESCRIPTIONS = "endpoint-descriptions"
-TAG_ENDPOINT_DESCRIPTION = "endpoint-description"
-TAG_PROPERTY = "property"
-TAG_ARRAY = "array"
-TAG_LIST = "list"
-TAG_SET = "set"
-TAG_XML = "xml"
-TAG_VALUE = "value"
+TAG_ENDPOINT_DESCRIPTIONS = "{{{0}}}endpoint-descriptions"\
+                                                        .format(EDEF_NAMESPACE)
+TAG_ENDPOINT_DESCRIPTION = "{{{0}}}endpoint-description".format(EDEF_NAMESPACE)
+TAG_PROPERTY = "{{{0}}}property".format(EDEF_NAMESPACE)
+TAG_ARRAY = "{{{0}}}array".format(EDEF_NAMESPACE)
+TAG_LIST = "{{{0}}}list".format(EDEF_NAMESPACE)
+TAG_SET = "{{{0}}}set".format(EDEF_NAMESPACE)
+TAG_XML = "{{{0}}}xml".format(EDEF_NAMESPACE)
+TAG_VALUE = "{{{0}}}value".format(EDEF_NAMESPACE)
 
 # Property attributes
 ATTR_NAME = "name"
 ATTR_VALUE_TYPE = "value-type"
-ATTR_VALUE = TAG_VALUE
+ATTR_VALUE = "value"
 
 # Value types
+TYPE_BOOLEAN = "boolean"
+TYPE_DOUBLE = "double"
+TYPE_LONG = "long"
 TYPE_STRING = "String"
+
 TYPES_BOOLEAN = ("boolean", "Boolean")
 TYPES_CHAR = ("char", "Character")
 TYPES_FLOAT = ("float", "Float", "double", "Double")
 TYPES_INT = ("int", "Integer", "long", "Long", "short", "Short",
              "bytes", "Bytes")
+
+# Type of properties
+TYPED_BOOL = (pelix.remote.PROP_IMPORTED,)
+TYPED_LONG = (pelix.remote.PROP_ENDPOINT_SERVICE_ID,)
+TYPED_STRING = (pelix.constants.OBJECTCLASS,
+                pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID,
+                pelix.remote.PROP_ENDPOINT_ID,
+                pelix.remote.PROP_ENDPOINT_PACKAGE_VERSION_,
+                pelix.remote.PROP_IMPORTED_CONFIGS,
+                pelix.remote.PROP_INTENTS)
+
+# Special case: XML value given
+XML_VALUE = object()
 
 # ------------------------------------------------------------------------------
 
@@ -76,15 +115,6 @@ class EDEFReader(object):
     """
     Reads an EDEF XML data. Inspired from EndpoitnDescriptionParser from ECF
     """
-    def __init__(self):
-        """
-        Sets up members
-        """
-        # Lock the parser
-        self.__lock = threading.Lock()
-        self.__parser = None
-
-
     def _convert_value(self, vtype, value):
         """
         Converts the given value string according to the given type
@@ -169,9 +199,8 @@ class EDEFReader(object):
         """
         kind = node.tag
         if kind == TAG_XML:
-            # Raw XML value (string)
-            xml_root = next(iter(node))
-            return ElementTree.tostring(xml_root, encoding=str, method='xml')
+            # Raw XML value
+            return next(iter(node))
 
         elif kind in (TAG_ARRAY, TAG_LIST):
             # List
@@ -207,14 +236,230 @@ class EDEFReader(object):
 # ------------------------------------------------------------------------------
 
 class EDEFWriter(object):
-    pass
+    """
+    EDEF XML file writer
+    """
+    def _indent(self, element, level=0, prefix='\t'):
+        """
+        In-place Element text auto-indent, for pretty printing.
+
+        Code from: http://effbot.org/zone/element-lib.htm#prettyprint
+
+        :param element: An Element object
+        :param level: Level of indentation
+        :param prefix: String to use for each indentation
+        """
+        element_prefix = "\r\n{0}".format(level * prefix)
+
+        if len(element):
+            if not element.text or not element.text.strip():
+                element.text = element_prefix + prefix
+
+            if not element.tail or not element.tail.strip():
+                element.tail = element_prefix
+
+            # Yep, let the "element" variable be overwritten
+            for element in element:
+                self._indent(element, level + 1, prefix)
+
+            # Tail of the last child
+            if not element.tail or not element.tail.strip():
+                element.tail = element_prefix
+
+        else:
+            if level and (not element.tail or not element.tail.strip()):
+                element.tail = element_prefix
+
+
+    def _add_container(self, props_node, tag, container):
+        """
+        Walks through the given container and fills the node
+
+        :param props_node: A property node
+        :param tag: Name of the container tag
+        :param container: The container
+        """
+        values_node = ElementTree.SubElement(props_node, tag)
+        for value in container:
+            value_node = ElementTree.SubElement(values_node, TAG_VALUE)
+            value_node.text = str(value)
+
+
+    def _get_type(self, name, value):
+        """
+        Returns the type associated to the given name or value
+
+        :param name: Property name
+        :param value: Property value
+        :return: A value type name
+        """
+        # Types forced for known keys
+        if name in TYPED_BOOL:
+            return TYPE_BOOLEAN
+
+        elif name in TYPED_LONG:
+            return TYPE_LONG
+
+        elif name in TYPED_STRING:
+            return TYPE_STRING
+
+        # We need to analyze the content of value
+        if isinstance(value, (tuple, list, set)):
+            # Get the type from container content
+            try:
+                # Extract value
+                value = next(iter(value))
+
+            except StopIteration:
+                # Empty list, can't check
+                return TYPE_STRING
+
+        # Single value
+        if isinstance(value, int):
+            # Integer
+            return TYPE_LONG
+
+        elif isinstance(value, float):
+            # Float
+            return TYPE_DOUBLE
+
+        elif isinstance(value, type(ElementTree.Element(None))):
+            # XML
+            return XML_VALUE
+
+        # Default: String
+        return TYPE_STRING
+
+
+    def _make_endpoint(self, root_node, endpoint):
+        """
+        Converts the given endpoint bean to an XML Element
+
+        :param root_node: The XML root Element
+        :param endpoint: An EndpointDescription bean
+        :return: An Element
+        """
+        endpoint_node = ElementTree.SubElement(root_node,
+                                               TAG_ENDPOINT_DESCRIPTION)
+
+        for name, value in endpoint.get_properties().items():
+            # Compute value type
+            vtype = self._get_type(name, value)
+
+            # Prepare the property node
+            prop_node = ElementTree.SubElement(endpoint_node, TAG_PROPERTY,
+                                               {ATTR_NAME: name})
+
+            if vtype == XML_VALUE:
+                # Special case, we have to store the value as a child
+                # without a value-type attribute
+                prop_node.append(value)
+                continue
+
+            # Set the value type
+            prop_node.set(ATTR_VALUE_TYPE, vtype)
+
+            # Compute value node or attribute
+            if isinstance(value, tuple):
+                # Array
+                self._add_container(prop_node, TAG_ARRAY, value)
+
+            elif isinstance(value, list):
+                # List
+                self._add_container(prop_node, TAG_LIST, value)
+
+            elif isinstance(value, set):
+                # Set
+                self._add_container(prop_node, TAG_SET, value)
+
+            elif isinstance(value, type(root_node)):
+                # XML (direct addition)
+                prop_node.append(value)
+
+            else:
+                # Simple value -> Attribute
+                prop_node.set(ATTR_VALUE, str(value))
+
+
+    def _make_xml(self, endpoints):
+        """
+        Converts the given endpoint description beans into an XML Element
+
+        :param endpoints: A list of EndpointDescription beans
+        :return: A string containing an XML document
+        """
+        root = ElementTree.Element(TAG_ENDPOINT_DESCRIPTIONS)
+
+        for endpoint in endpoints:
+            self._make_endpoint(root, endpoint)
+
+        # Prepare pretty-printing
+        self._indent(root)
+
+        return root
+
+
+    def to_string(self, endpoints):
+        """
+        Converts the given endpoint description beans into a string
+
+        :param endpoints: A list of EndpointDescription beans
+        :return: A string containing an XML document
+        """
+        # Make the ElementTree
+        root = self._make_xml(endpoints)
+        tree = ElementTree.ElementTree(root)
+
+        # Force the default name space
+        ElementTree.register_namespace("", EDEF_NAMESPACE)
+
+        # Make the XML
+        for encoding in ('unicode', 'UTF-8'):
+            # Prepare a StringIO output
+            output = StringIO()
+
+            try:
+                # Try to write with a correct encoding
+                tree.write(output, encoding=encoding, xml_declaration=True,
+                           method="xml")
+                break
+
+            except LookupError:
+                # 'unicode' is needed in Python 3, but unknown in Python 2...
+                continue
+
+        else:
+            raise LookupError("Couldn't find a valid encoding")
+
+        return output.getvalue()
+
+
+    def write(self, endpoints, filename):
+        """
+        Writes the given endpoint descriptions to the given file
+
+        :param endpoints: A list of EndpointDescription beans
+        :param filename: Name of the file where to write the XML
+        :raise IOError: Error writing the file
+        """
+        with open(filename, "w") as fp:
+            fp.write(self.to_string(endpoints))
 
 # ------------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    with open("edef_test.xml", "r") as fp:
+    # Read the XML file
+    import os
+    filepath = "edef_sample.xml"
+    if filepath not in os.listdir('.'):
+        # If not current directory, look in the parent
+        filepath = os.path.join('..', filepath)
+
+    with open(filepath, "r") as fp:
         xml_str = fp.read()
 
+    # Parse it
+    print("-" * 40)
     reader = EDEFReader()
     endpoints = reader.parse(xml_str)
     for endpoint in endpoints:
@@ -222,3 +467,8 @@ if __name__ == "__main__":
         print("Properties:")
         from pprint import pprint
         pprint(endpoint.get_properties())
+
+    # Print its "written" form
+    print("-" * 40)
+    writer = EDEFWriter()
+    print(writer.to_string(endpoints))

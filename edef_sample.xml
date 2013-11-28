@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--  xmlns="http://www.osgi.org/xmlns/rsa/v1.0.0" -->
-<endpoint-descriptions>
+<!-- Sample file from section 122.8 of OSGi Compendium specification -->
+<endpoint-descriptions xmlns="http://www.osgi.org/xmlns/rsa/v1.0.0">
 	<endpoint-description>
 		<property name="service.intents">
 			<list>
