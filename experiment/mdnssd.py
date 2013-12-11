@@ -70,7 +70,7 @@ class ZeroconfDiscovery(object):
     """
     Remote services discovery and notification using the module zeroconf
     """
-    DNS_RS_TYPE = '_pelix_remote_service._tcp.local.'
+    DNS_RS_TYPE = '_ecfosgirsvc._default.default.'
     DNS_DISPATCHER_TYPE = '_pelix_dispatcher_servlet._tcp.local.'
     TTL = 60  # 1 minute TTL
 
@@ -213,7 +213,7 @@ class ZeroconfDiscovery(object):
 
         # Convert properties to be stored as strings
         properties = {"pelix.version": pelix.__version__,
-                      "pelix.framework.uid": self._fw_uid,
+                      pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID: self._fw_uid,
                       "pelix.access.port": access[0],
                       "pelix.access.path": access[1]}
         properties = self._serialize_properties(properties)
@@ -240,7 +240,7 @@ class ZeroconfDiscovery(object):
 
         # Add access properties
         properties = endpoint.reference.get_properties()
-        properties["pelix.framework.uid"] = self._fw_uid
+        properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID] = self._fw_uid
         properties["pelix.access.port"] = access[0]
         properties["pelix.access.path"] = access[1]
 
