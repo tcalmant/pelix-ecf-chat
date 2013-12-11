@@ -49,15 +49,27 @@ class EndpointDescription(object):
 
     This is an importer-side description
     """
-    def __init__(self, properties):
+    def __init__(self, svc_ref, properties):
         """
         Sets up the description with the given properties
 
         :raise ValueError: Invalid properties
         """
-        # Validate properties
-        if not properties:
-            raise ValueError("No properties given")
+        # Set up properties
+        all_properties = {}
+        if svc_ref is not None:
+            all_properties.update(svc_ref.get_properties())
+
+        if properties:
+            all_properties.update(properties)
+
+        # Add  some properties if the service reference is given
+        if svc_ref is not None:
+            # Service ID
+            all_properties[pelix.remote.PROP_ENDPOINT_SERVICE_ID] = \
+                                svc_ref.get_property(pelix.constants.SERVICE_ID)
+
+            # TODO: Framework UUID ??
 
         self.__check_properties(properties)
 
