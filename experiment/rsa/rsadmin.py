@@ -81,18 +81,25 @@ class RemoteServiceAdmin(object):
         self._context = None
 
 
-    def __publish_import_event(self, event_type, registration):
+    def __publish_event(self, event_type, registration):
         """
-        TODO: Publishes an import event
+        Publishes a RemoteServiceAdmin event
         """
-        pass
+        # Get the import or export reference
+        if event_type in rsa_beans.EXPORT_TYPES:
+            reference = registration.get_export_reference()
+        else:
+            reference = registration.get_import_reference()
 
+        # Prepare the event bean
+        event = rsa_beans.RemoteServiceAdminEvent(event_type,
+                                                  self._context.get_bundle(),
+                                                  reference,
+                                                  registration.get_exception())
 
-    def __publish_export_event(self, event_type, registration):
-        """
-        TODO: Publishes an export event
-        """
-        pass
+        # Call listeners in the current thread
+        for listener in self._listeners[:]:
+            listener.remoteAdminEvent(event)
 
 
     def _find_config_handler(self, configs):
@@ -198,16 +205,15 @@ class RemoteServiceAdmin(object):
                         exp_reg = rsa_beans.ExportRegistration(exp_ref)
 
                         # Notify listeners
-                        self.__publish_export_event(
-                                                rsa_beans.EXPORT_REGISTRATION,
-                                                exp_reg)
+                        self.__publish_event(rsa_beans.EXPORT_REGISTRATION,
+                                             exp_reg)
 
                 except Exception as ex:
                     # Config Handler error
                     exp_reg = rsa_beans.ExportRegistration(exp_ref, ex)
 
                     # Notify listeners
-                    self.__publish_export_event(rsa_beans.EXPORT_ERROR, exp_reg)
+                    self.__publish_event(rsa_beans.EXPORT_ERROR, exp_reg)
 
             return registrations
 
@@ -254,7 +260,7 @@ class RemoteServiceAdmin(object):
                 self.__imported_regs.append(imp_reg)
 
             # Publish event
-            self.__publish_import_event(rsa_beans.IMPORT_REGISTRATION, imp_reg)
+            self.__publish_event(rsa_beans.IMPORT_REGISTRATION, imp_reg)
 
             # Done
             return imp_reg
@@ -264,7 +270,7 @@ class RemoteServiceAdmin(object):
             registration = rsa_beans.ImportRegistration(None, ex)
 
             # Publish an event anyway
-            self.__publish_import_event(rsa_beans.IMPORT_ERROR, registration)
+            self.__publish_event(rsa_beans.IMPORT_ERROR, registration)
             return registration
 
 

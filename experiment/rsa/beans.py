@@ -37,24 +37,6 @@ EXPORT_TYPES = (EXPORT_REGISTRATION, EXPORT_UNREGISTRATION,
                 EXPORT_ERROR, EXPORT_WARNING)
 """ Export notification types """
 
-
-# --- Remote service admin listener interface ---
-
-class RemoteServiceAdminListener(object):
-    """
-    A RemoteServiceAdminEvent listener is notified synchronously of any export
-    or import registrations and unregistrations.
-    """
-    def remoteAdminEvent(self, event):
-        """
-        Receive notification of any export or import registrations and
-        unregistrations as well as errors and warnings.
-
-        :param event: The RemoteServiceAdminEvent object.
-        """
-        pass
-
-
 # ------------------------------------------------------------------------------
 
 class ImportReference(object):
@@ -178,7 +160,7 @@ class ExportRegistration(object):
         self.exception = None
 
 
-    def getException(self):
+    def get_exception(self):
         """
         Return the exception for any error during the export process.
 
@@ -188,7 +170,7 @@ class ExportRegistration(object):
         return self.exception
 
 
-    def getExportReference(self):
+    def get_export_reference(self):
         """
         :return: The Export Reference for this registration.
         """
@@ -205,7 +187,7 @@ class RemoteServiceAdminEvent(object):
         :param evt_type: The event type
         :param source: The source bundle, must not be None
         :param export: If True, the reference is an export one, else False
-        :param reference: The import or export refernece, can't be None
+        :param reference: The import or export reference, can't be None
         :param exception: Any exception encountered, can be None
         """
         self.evt_type = evt_type
@@ -213,7 +195,7 @@ class RemoteServiceAdminEvent(object):
         self.reference = reference
         self.exception = exception
 
-        self.export = source in EXPORT_TYPES
+        self.export = evt_type in EXPORT_TYPES
 
 
     def getException(self):
