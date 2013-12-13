@@ -57,7 +57,7 @@ _logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------------------
 
-@ComponentFactory("experiment-discovery-file")
+@ComponentFactory("experiment-discovery-file-factory")
 @Provides(pelix.services.SERVICE_FILEINSTALL_LISTENERS)
 @Property('_watched_folder', pelix.services.PROP_FILEINSTALL_FOLDER)
 @Requires("_registry", pelix.remote.SERVICE_REGISTRY)
@@ -109,7 +109,7 @@ class FileDiscovery(object):
                 yield name, os.path.join(folder, name)
 
 
-    def _load_endpoint(self, path):
+    def _load_endpoints(self, path):
         """
         Loads the EDEF file at the given path
 
@@ -122,13 +122,11 @@ class FileDiscovery(object):
         with open(path, 'r') as filep:
             xml_content = filep.read()
 
-        # Parse the end point
-        edef_endpoint = self._parser.parse(xml_content)
+        # Parse the end points
+        edef_endpoints = self._parser.parse(xml_content)
 
-        # Convert it to the Pelix format
-        import_endpoint = beans.to_import(edef_endpoint)
-
-        return import_endpoint
+        # Convert them to the Pelix format
+        return [beans.to_import(endpoint) for endpoint in edef_endpoints]
 
 
     def folder_change(self, folder, added, updated, deleted):
@@ -142,10 +140,13 @@ class FileDiscovery(object):
         """
         for name, path in self.__filter_names(folder, added):
             try:
-                # Add new endpoint
-                endpoint = self._load_endpoint(path)
-                self._registry.add(endpoint)
-                self._endpoints[name] = endpoint
+                # Add new endpoints
+                endpoints = self._load_endpoints(path)
+                for endpoint in endpoints:
+                    # Import the service
+                    self._registry.add(endpoint)
+
+                self._endpoints[name] = endpoints
 
             except (IOError, ValueError):
                 # Not an EDEF file
@@ -158,10 +159,10 @@ class FileDiscovery(object):
         for name, _ in self.__filter_names(folder, deleted):
             try:
                 # Remove endpoints
-                endpoint = self._endpoints.pop(name)
-                self._registry.remove(endpoint)
+                endpoints = self._endpoints.pop(name)
+                for endpoint in endpoints:
+                    self._registry.remove(endpoint)
 
             except KeyError:
                 # Wasn't an EDEF file
                 pass
-
