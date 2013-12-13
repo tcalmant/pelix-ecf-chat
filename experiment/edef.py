@@ -162,7 +162,7 @@ class EDEFReader(object):
             name, value = self._parse_property(prop_node)
             endpoint[name] = value
 
-        return beans.EndpointDescription(endpoint)
+        return beans.EndpointDescription(None, endpoint)
 
 
     def _parse_property(self, node):
@@ -205,12 +205,12 @@ class EDEFReader(object):
         elif kind in (TAG_ARRAY, TAG_LIST):
             # List
             return [self._convert_value(vtype, value_node.text)
-                    for value_node in node.find(TAG_VALUE)]
+                    for value_node in node.findall(TAG_VALUE)]
 
         elif kind == TAG_SET:
             # Set
             return set(self._convert_value(vtype, value_node.text)
-                       for value_node in node.find(TAG_VALUE))
+                       for value_node in node.findall(TAG_VALUE))
 
         else:
             # Unknown
