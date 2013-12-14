@@ -57,7 +57,7 @@ def start_remote_services(context):
                    "pelix.remote.registry",
                    "pelix.remote.discovery.multicast",
                    # "experiment.mdnssd",
-                   "experiment.disco_file"
+                   "experiment.disco_file",
                    "pelix.remote.json_rpc"):
         context.install_bundle(bundle).start()
 
