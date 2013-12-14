@@ -128,6 +128,6 @@ def main(args):
 if __name__ == "__main__":
     # Script call
     import logging
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
 
     main(sys.argv[1:])
