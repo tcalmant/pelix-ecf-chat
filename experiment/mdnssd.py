@@ -59,12 +59,6 @@ import json
 import logging
 import socket
 
-try:
-    from urlparse import urlparse
-
-except ImportError:
-    from urlib.parse import urlparse
-
 # ------------------------------------------------------------------------------
 
 _logger = logging.getLogger(__name__)
@@ -242,6 +236,10 @@ class ZeroconfDiscovery(object):
         self._zeroconf.registerService(info, ZeroconfDiscovery.TTL)
 
 
+    def endpoints_added(self, endpoint):
+        pass
+
+
     def endpoint_added(self, endpoint):
         """
         A new service is exported
@@ -361,11 +359,6 @@ class ZeroconfDiscovery(object):
             # FIXME: Avoid to do Pelix specific stuff here
             if configuration == 'ecf.jabsorb':
                 # Service exported with Jabsorb ECF
-
-                # Parse the host
-                access = properties['ecf.jabsorb.accesses'].split(',')[0]
-                host = urlparse(access).hostname
-
                 # Ensure we have a list of specifications
                 specs = properties[pelix.constants.OBJECTCLASS]
                 if is_string(specs):
@@ -379,8 +372,8 @@ class ZeroconfDiscovery(object):
                                     properties['ecf.jabsorb.name'],
                                     specs,
                                     properties)
-                endpoint.server = host
 
+                # Register the endpoint
                 self._registry.add(endpoint)
 
 
