@@ -6,6 +6,9 @@ Pelix remote services: Zeroconf discovery and event notification
 This module depends on the pyzeroconf project by Mike Fletcher
 (https://github.com/mcfletch/pyzeroconf).
 
+To work with ECF, the '.local.' checking in zeroconf.mdns.DNSQuestion must be
+removed (around line 220)
+
 :author: Thomas Calmant
 :copyright: Copyright 2013, isandlaTech
 :license: Apache License 2.0
@@ -43,16 +46,24 @@ import zeroconf.mdns as mdns
 
 # Remote services
 import pelix.remote
+import pelix.remote.beans as beans
 from pelix.utilities import is_string, to_str
 
 # iPOPO decorators
 from pelix.ipopo.decorators import ComponentFactory, Requires, Provides, \
     Invalidate, Validate, Property
+import pelix.constants
 
 # Standard library
 import json
 import logging
 import socket
+
+try:
+    from urlparse import urlparse
+
+except ImportError:
+    from urlib.parse import urlparse
 
 # ------------------------------------------------------------------------------
 
@@ -309,15 +320,21 @@ class ZeroconfDiscovery(object):
 
             retries += 1
 
-        # Get access info
+        # Get source info
         address = to_str(socket.inet_ntoa(info.getAddress()))
         port = info.getPort()
+
+        _logger.debug("Got service info: %s", info)
+#         _logger.debug("Address...: %s", address)
+#         _logger.debug("Port......: %s", port)
+#         from pprint import pformat
+#         _logger.debug("Properties: %s", pformat(info.getProperties()))
 
         # Read properties
         properties = self._deserialize_properties(info.getProperties())
 
         try:
-            sender_uid = properties['pelix.framework.uid']
+            sender_uid = properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID]
             if sender_uid == self._fw_uid:
                 # We sent this message
                 _logger.info("Loop back message")
@@ -335,17 +352,56 @@ class ZeroconfDiscovery(object):
 
         else:
             # Remote service
-            _logger.info("New service %s at %s:%d", properties['objectClass'],
-                          address, port)
 
-            # TODO: add missing information (see endpoint_added)
-            endpoint = {'sender': sender_uid,
-                        'properties': properties,
-                        'url': None,
-                        'uid': None,
-                        'name': None,
-                        'kind': None,
-                        'specifications': properties['objectClass']}
+            # Get the first available configuration
+            configuration = properties[pelix.remote.PROP_IMPORTED_CONFIGS]
+            if not is_string(configuration):
+                configuration = configuration[0]
+
+            # FIXME: Avoid to do Pelix specific stuff here
+            if configuration == 'ecf.jabsorb':
+                # Service exported with Jabsorb ECF
+
+                # Parse the host
+                access = properties['ecf.jabsorb.accesses'].split(',')[0]
+                host = urlparse(access).hostname
+
+                # Ensure we have a list of specifications
+                specs = properties[pelix.constants.OBJECTCLASS]
+                if is_string(specs):
+                    specs = [specs]
+
+                # Make an import bean
+                endpoint = beans.ImportEndpoint(
+                                    properties[pelix.remote.PROP_ENDPOINT_ID],
+                                    properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID],
+                                    [configuration],
+                                    properties['ecf.jabsorb.name'],
+                                    specs,
+                                    properties)
+                endpoint.server = host
+
+                self._registry.add(endpoint)
+
+
+            elif 'ecf' not in configuration:
+                # "Classic" Pelix
+                _logger.info("New service %s from %s:%d",
+                             properties['objectClass'], address, port)
+
+                # TODO: add missing information (see endpoint_added)
+                endpoint = {'sender': sender_uid,
+                            'properties': properties,
+                            'url': None,
+                            'uid': None,
+                            'name': None,
+                            'kind': None,
+                            'specifications': properties['objectClass']}
+
+            else:
+                _logger.warning("Unhandled ECF configuration: %s",
+                                configuration)
+                return
 
             _logger.info("Endpoint data: %s", endpoint)
 
