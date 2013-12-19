@@ -14,7 +14,7 @@ __docformat__ = "restructuredtext en"
 # -----------------------------------------------------------------------------
 
 # Local
-import chat.constants
+# import chat.constants
 
 # Pelix
 from pelix.ipopo.constants import use_ipopo
@@ -31,7 +31,8 @@ def start_server(context):
     Starts the server component
     """
     # Just start the server bundle
-    context.install_bundle('chat.server').start()
+#    context.install_bundle('chat.server').start()
+    context.install_bundle("time_provider").start()
 
 
 def start_client(context, name):
@@ -42,9 +43,13 @@ def start_client(context, name):
     context.install_bundle('chat.client').start()
 
     # Instantiate the client component
-    with use_ipopo(context) as ipopo:
-        ipopo.instantiate(chat.constants.FACTORY_CLIENT, "chat-client",
-                          {chat.constants.PROP_CLIENT_HANDLE: name})
+#     with use_ipopo(context) as ipopo:
+#         ipopo.instantiate(chat.constants.FACTORY_CLIENT, "chat-client",
+#                           {chat.constants.PROP_CLIENT_HANDLE: name})
+
+
+    # Bonus...
+    context.install_bundle("time_consumer").start()
 
 
 def start_remote_services(context):
@@ -56,9 +61,11 @@ def start_remote_services(context):
                    "pelix.remote.dispatcher",
                    "pelix.remote.registry",
                    "pelix.remote.discovery.multicast",
-                   "experiment.mdnssd",
                    "experiment.disco_file",
-                   "pelix.remote.json_rpc"):
+                   "experiment.jabsorb",
+                   "experiment.jabsorb_rpc",
+                   "pelix.remote.json_rpc",
+                   "experiment.mdnssd"):
         context.install_bundle(bundle).start()
 
     # Instantiate components
@@ -73,18 +80,24 @@ def start_remote_services(context):
                           "pelix-remote-dispatcher-servlet", {})
 
         # ... multicast discovery
-        ipopo.instantiate("pelix-remote-discovery-multicast-factory",
-                          "pelix-remote-discovery-multicast", {})
+#         ipopo.instantiate("pelix-remote-discovery-multicast-factory",
+#                           "pelix-remote-discovery-multicast", {})
 
         # ... mDNS discovery
         ipopo.instantiate("experiment-zeroconf-discovery-factory",
                           "experiment-zeroconf-discovery", {})
 
         # ... JSON-RPC exporter and importer
-        ipopo.instantiate("pelix-jsonrpc-exporter-factory",
-                          "pelix-jsonrpc-exporter", {})
-        ipopo.instantiate("pelix-jsonrpc-importer-factory",
-                          "pelix-jsonrpc-importer", {})
+#         ipopo.instantiate("pelix-jsonrpc-exporter-factory",
+#                           "pelix-jsonrpc-exporter", {})
+#         ipopo.instantiate("pelix-jsonrpc-importer-factory",
+#                           "pelix-jsonrpc-importer", {})
+
+        # ... JABSORB-RPC exporter and importer
+        ipopo.instantiate("cohorte-jabsorbrpc-exporter-factory",
+                          "cohorte-jabsorbrpc-exporter", {})
+        ipopo.instantiate("cohorte-jabsorbrpc-importer-factory",
+                          "cohorte-jabsorbrpc-importer", {})
 
 # -----------------------------------------------------------------------------
 
