@@ -67,7 +67,6 @@ _logger = logging.getLogger(__name__)
 
 @ComponentFactory("experiment-zeroconf-discovery-factory")
 @Provides(pelix.remote.SERVICE_ENDPOINT_LISTENER)
-@Requires("_dispatcher", pelix.remote.SERVICE_DISPATCHER)
 @Requires('_access', pelix.remote.SERVICE_DISPATCHER_SERVLET)
 @Requires("_registry", pelix.remote.SERVICE_REGISTRY)
 @Property("_listener_flag", pelix.remote.PROP_LISTEN_EXPORTED, True)
@@ -86,8 +85,7 @@ class ZeroconfDiscovery(object):
         # End point listener flag
         self._listener_flag = True
 
-        # End points registry
-        self._dispatcher = None
+        # Imported endpoints registry
         self._registry = None
 
         # Dispatcher access
