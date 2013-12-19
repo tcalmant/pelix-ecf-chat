@@ -12,7 +12,7 @@ removed (around line 220)
 :author: Thomas Calmant
 :copyright: Copyright 2013, isandlaTech
 :license: Apache License 2.0
-:version: 0.1
+:version: 0.3
 :status: Alpha
 
 ..
@@ -33,7 +33,7 @@ removed (around line 220)
 """
 
 # Module version
-__version_info__ = (0, 2, 0)
+__version_info__ = (0, 3, 0)
 __version__ = ".".join(str(x) for x in __version_info__)
 
 # Documentation strings format
@@ -140,6 +140,9 @@ class ZeroconfDiscovery(object):
         # Prepare Zeroconf
         self._zeroconf = mdns.Zeroconf("0.0.0.0")
 
+        # Register the dispatcher servlet as a service
+        self.__register_servlet()
+
         # Listen to our types
         self._browsers.append(mdns.ServiceBrowser(self._zeroconf,
                                         ZeroconfDiscovery.DNS_DISPATCHER_TYPE,
@@ -147,9 +150,6 @@ class ZeroconfDiscovery(object):
         self._browsers.append(mdns.ServiceBrowser(self._zeroconf,
                                         ZeroconfDiscovery.DNS_RS_TYPE,
                                         self))
-
-        # Register the dispatcher servlet as a service
-        self.__register_servlet()
 
         _logger.debug("Zeroconf discovery validated")
 
@@ -236,39 +236,50 @@ class ZeroconfDiscovery(object):
         self._zeroconf.registerService(info, ZeroconfDiscovery.TTL)
 
 
-    def endpoints_added(self, endpoint):
-        pass
+    def endpoints_added(self, endpoints):
+        """
+        Multiple endpoints have been added
+
+        :param endpoint: A list of ExportEndpoint beans
+        """
+        # Get the dispatcher servlet port
+        access_port = self._access.get_access()[0]
+
+        # Handle each one separately
+        for endpoint in endpoints:
+            self._endpoint_added(endpoint, access_port)
 
 
-    def endpoint_added(self, endpoint):
+    def _endpoint_added(self, exp_endpoint, access_port):
         """
         A new service is exported
+
+        :param exp_endpoint: An ExportEndpoint bean
+        :param access_port: The dispatcher access port
         """
-        # Get the dispatcher servlet access
-        access = self._access.get_access()
+        # Convert the export endpoint into an EndpointDescription bean
+        endpoint = beans.from_export(exp_endpoint)
 
-        # Add access properties
-        properties = endpoint.reference.get_properties()
-        properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID] = self._fw_uid
-        properties["pelix.access.port"] = access[0]
-        properties["pelix.access.path"] = access[1]
-
-        # TODO: add missing information to properties (UID, kind, URL, ...)
-        # (see addService)
+        # Get its properties
+        properties = endpoint.get_properties()
 
         # Convert properties to be stored as strings
         properties = self._serialize_properties(properties)
 
+        # Prepare the service name
+        svc_name = "{0}.{1}.{2}".format(endpoint.get_id(),
+                                        endpoint.get_framework_uuid(),
+                                        ZeroconfDiscovery.DNS_RS_TYPE)
+
         # Prepare the mDNS entry
         info = mdns.ServiceInfo(ZeroconfDiscovery.DNS_RS_TYPE,  # Type
-                                "{0}.{1}".format(endpoint.uid,  # Name
-                                                 ZeroconfDiscovery.DNS_RS_TYPE),
+                                svc_name,  # Name
                                 self._address,  # Access address
-                                access[0],  # Access port
+                                access_port,  # Access port
                                 properties=properties  # Properties
                                 )
 
-        self._infos[endpoint.uid] = info
+        self._infos[exp_endpoint.uid] = info
 
         # Register the service
         self._zeroconf.registerService(info, ZeroconfDiscovery.TTL)
@@ -279,7 +290,7 @@ class ZeroconfDiscovery(object):
         An end point is updated
         """
         # Not available...
-        pass
+        return
 
 
     def endpoint_removed(self, endpoint):
@@ -292,11 +303,32 @@ class ZeroconfDiscovery(object):
 
         except KeyError:
             # Unknown service
-            pass
+            _logger.debug("Unknown removed endpoint: %s", endpoint)
 
         else:
             # Unregister the service
             self._zeroconf.unregisterService(info)
+
+
+    def _get_service_info(self, svc_type, name, max_retries=10):
+        """
+        Tries to get information about the given mDNS service
+
+        :param svc_type: Service type
+        :param name: Service name
+        :param max_retries: Number of retries before timeout
+        :return: A ServiceInfo bean
+        """
+        info = None
+        retries = 0
+        while self._zeroconf is not None \
+        and info is None \
+        and retries < max_retries:
+            # Try to get information about the service...
+            info = self._zeroconf.getServiceInfo(svc_type, name)
+            retries += 1
+
+        return info
 
 
     def addService(self, zeroconf, svc_type, name):
@@ -308,25 +340,11 @@ class ZeroconfDiscovery(object):
         :param name: Service name
         """
         # Get information about the service
-        info = None
-        retries = 0
-        while not info and retries < 10:
-            # Try to get information about the service...
-            info = self._zeroconf.getServiceInfo(svc_type, name)
-            if not info:
-                _logger.debug("Timeout reading info about %s", name)
-
-            retries += 1
-
-        # Get source info
-        address = to_str(socket.inet_ntoa(info.getAddress()))
-        port = info.getPort()
-
-        _logger.debug("Got service info: %s", info)
-#         _logger.debug("Address...: %s", address)
-#         _logger.debug("Port......: %s", port)
-#         from pprint import pformat
-#         _logger.debug("Properties: %s", pformat(info.getProperties()))
+        info = self._get_service_info(svc_type, name)
+        if info is None:
+            _logger.warning("Timeout reading service information: %s - %s",
+                            svc_type, name)
+            return
 
         # Read properties
         properties = self._deserialize_properties(info.getProperties())
@@ -344,11 +362,14 @@ class ZeroconfDiscovery(object):
             return
 
         if svc_type == ZeroconfDiscovery.DNS_DISPATCHER_TYPE:
-            # Dispatcher servlet found
+            # Dispatcher servlet found, get source info
+            address = to_str(socket.inet_ntoa(info.getAddress()))
+            port = info.getPort()
+
             self._access.send_discovered(address, port,
                                          properties['pelix.access.path'])
 
-        else:
+        elif svc_type == ZeroconfDiscovery.DNS_RS_TYPE:
             # Remote service
 
             # Get the first available configuration
@@ -356,50 +377,31 @@ class ZeroconfDiscovery(object):
             if not is_string(configuration):
                 configuration = configuration[0]
 
-            # FIXME: Avoid to do Pelix specific stuff here
-            if configuration == 'ecf.jabsorb':
-                # Service exported with Jabsorb ECF
-                # Ensure we have a list of specifications
-                specs = properties[pelix.constants.OBJECTCLASS]
-                if is_string(specs):
-                    specs = [specs]
+            # Ensure we have a list of specifications
+            specs = properties[pelix.constants.OBJECTCLASS]
+            if is_string(specs):
+                specs = [specs]
 
+            try:
                 # Make an import bean
                 endpoint = beans.ImportEndpoint(
-                                    properties[pelix.remote.PROP_ENDPOINT_ID],
-                                    properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID],
-                                    [configuration],
-                                    properties['ecf.jabsorb.name'],
-                                    specs,
-                                    properties)
+                                properties[pelix.remote.PROP_ENDPOINT_ID],
+                                properties[pelix.remote.\
+                                            PROP_ENDPOINT_FRAMEWORK_UUID],
+                                [configuration], None, specs, properties)
 
+            except KeyError as ex:
+                # Log a warning on incomplete endpoints
+                _logger.warning("Incomplete endpoint description, "
+                                "missing %s: %s", ex, properties)
+                return
+
+            else:
                 # Register the endpoint
                 self._registry.add(endpoint)
 
 
-            elif 'ecf' not in configuration:
-                # "Classic" Pelix
-                _logger.info("New service %s from %s:%d",
-                             properties['objectClass'], address, port)
-
-                # TODO: add missing information (see endpoint_added)
-                endpoint = {'sender': sender_uid,
-                            'properties': properties,
-                            'url': None,
-                            'uid': None,
-                            'name': None,
-                            'kind': None,
-                            'specifications': properties['objectClass']}
-
-            else:
-                _logger.warning("Unhandled ECF configuration: %s",
-                                configuration)
-                return
-
-            _logger.info("Endpoint data: %s", endpoint)
-
-
-    def removeService(self, zeroconf, type_, name):
+    def removeService(self, zeroconf, svc_type, name):
         """
         Called by Zeroconf when a record is removed
 
@@ -407,4 +409,26 @@ class ZeroconfDiscovery(object):
         :param svc_type: Service type
         :param name: Service name
         """
-        _logger.info("Service %s removed", name)
+        if svc_type == ZeroconfDiscovery.DNS_RS_TYPE:
+            # Get information about the service
+            info = self._get_service_info(svc_type, name)
+            if info is None:
+                _logger.warning("Timeout reading service information: %s - %s",
+                                svc_type, name)
+                return
+
+            # Read its properties
+            properties = self._deserialize_properties(info.getProperties())
+
+            try:
+                # Get the endpoint UID
+                uid = properties[pelix.remote.PROP_ENDPOINT_ID]
+
+            except KeyError as ex:
+                _logger.warning("Incomplete endpoint description, "
+                                    "missing %s: %s", ex, properties)
+                return
+
+            else:
+                # Remove it
+                self._registry.remove(uid)
