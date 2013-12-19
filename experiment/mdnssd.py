@@ -101,7 +101,10 @@ class ZeroconfDiscovery(object):
         self._browsers = []
 
         # Endpoint UID -> ServiceInfo
-        self._infos = {}
+        self._export_infos = {}
+
+        # mDNS name -> Endpoint UID
+        self._imported_endpoints = {}
 
 
     @Invalidate
@@ -118,7 +121,7 @@ class ZeroconfDiscovery(object):
         self._zeroconf.close()
 
         # Clean up
-        self._infos.clear()
+        self._export_infos.clear()
         self._zeroconf = None
         self._fw_uid = None
 
@@ -279,7 +282,7 @@ class ZeroconfDiscovery(object):
                                 properties=properties  # Properties
                                 )
 
-        self._infos[exp_endpoint.uid] = info
+        self._export_infos[exp_endpoint.uid] = info
 
         # Register the service
         self._zeroconf.registerService(info, ZeroconfDiscovery.TTL)
@@ -299,7 +302,7 @@ class ZeroconfDiscovery(object):
         """
         try:
             # Get the associated service info
-            info = self._infos.pop(endpoint.uid)
+            info = self._export_infos.pop(endpoint.uid)
 
         except KeyError:
             # Unknown service
@@ -353,12 +356,11 @@ class ZeroconfDiscovery(object):
             sender_uid = properties[pelix.remote.PROP_ENDPOINT_FRAMEWORK_UUID]
             if sender_uid == self._fw_uid:
                 # We sent this message
-                _logger.info("Loop back message")
                 return
 
         except KeyError:
             # Not a Pelix message
-            _logger.warning("Not a Pelix record")
+            _logger.warning("Not a Pelix record: %s", properties)
             return
 
         if svc_type == ZeroconfDiscovery.DNS_DISPATCHER_TYPE:
@@ -398,7 +400,9 @@ class ZeroconfDiscovery(object):
 
             else:
                 # Register the endpoint
-                self._registry.add(endpoint)
+                if self._registry.add(endpoint):
+                    # Associate the mDNS name to the endpoint
+                    self._imported_endpoints[name] = endpoint.uid
 
 
     def removeService(self, zeroconf, svc_type, name):
@@ -411,22 +415,15 @@ class ZeroconfDiscovery(object):
         """
         if svc_type == ZeroconfDiscovery.DNS_RS_TYPE:
             # Get information about the service
-            info = self._get_service_info(svc_type, name)
-            if info is None:
-                _logger.warning("Timeout reading service information: %s - %s",
-                                svc_type, name)
-                return
-
-            # Read its properties
-            properties = self._deserialize_properties(info.getProperties())
+            _logger.debug("Remove service: %s -- %s...", svc_type, name)
 
             try:
-                # Get the endpoint UID
-                uid = properties[pelix.remote.PROP_ENDPOINT_ID]
+                # Get the stored endpoint UID
+                uid = self._imported_endpoints.pop(name)
 
-            except KeyError as ex:
+            except KeyError:
                 _logger.warning("Incomplete endpoint description, "
-                                    "missing %s: %s", ex, properties)
+                                    "missing: %s", name)
                 return
 
             else:
