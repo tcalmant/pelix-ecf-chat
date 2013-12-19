@@ -175,6 +175,13 @@ class ZeroconfDiscovery(object):
                     new_props[key] = "pelix-type:{0}:{1}" \
                                      .format(type(value).__name__, repr(value))
 
+        # FIXME: for use with ECF
+        try:
+            new_props[pelix.constants.OBJECTCLASS] = props[pelix.constants.OBJECTCLASS][0]
+            new_props[pelix.remote.PROP_IMPORTED_CONFIGS] = props[pelix.remote.PROP_IMPORTED_CONFIGS][0]
+        except KeyError:
+            pass
+
         return new_props
 
 
@@ -401,7 +408,7 @@ class ZeroconfDiscovery(object):
             else:
                 # Register the endpoint
                 if self._registry.add(endpoint):
-                    # Associate the mDNS name to the endpoint
+                    # Associate the mDNS name to the endpoint on success
                     self._imported_endpoints[name] = endpoint.uid
 
 
@@ -415,15 +422,12 @@ class ZeroconfDiscovery(object):
         """
         if svc_type == ZeroconfDiscovery.DNS_RS_TYPE:
             # Get information about the service
-            _logger.debug("Remove service: %s -- %s...", svc_type, name)
-
             try:
                 # Get the stored endpoint UID
                 uid = self._imported_endpoints.pop(name)
 
             except KeyError:
-                _logger.warning("Incomplete endpoint description, "
-                                    "missing: %s", name)
+                # Unknown service
                 return
 
             else:
